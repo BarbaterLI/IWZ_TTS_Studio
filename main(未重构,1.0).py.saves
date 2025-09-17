@@ -1,0 +1,1620 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import sys
+import os
+import asyncio
+import edge_tts
+import tempfile
+import pygame
+import json
+import shutil
+from dataclasses import dataclass, asdict
+from typing import Dict, List, Optional, Tuple, Any
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QTextEdit, QPushButton, QLabel, QComboBox, QSlider, QFileDialog,
+    QMessageBox, QProgressBar, QGroupBox, QMenu, QColorDialog, QFontDialog,
+    QTabWidget, QSplitter, QStatusBar, QToolBar, QDialog, QFormLayout,
+    QLineEdit, QDialogButtonBox, QListWidget, QListWidgetItem, QSpinBox,
+    QDoubleSpinBox, QCheckBox, QTableWidget, QTableWidgetItem, QHeaderView,
+    QStyle, QStyleOptionSlider, QStylePainter, QFrame, QScrollArea
+)
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QPoint, QSize, QPropertyAnimation, QEasingCurve
+from PyQt6.QtGui import (
+    QIcon, QFont, QTextCharFormat, QAction, QTextCursor, QColor, 
+    QTextDocument, QTextFormat, QPixmap, QPainter, QPen, QBrush,
+    QLinearGradient, QFontDatabase, QKeySequence
+)
+
+# 自定义样式表
+STYLESHEET = """
+QMainWindow {
+    background-color: #2b2b2b;
+    color: #ffffff;
+}
+
+QGroupBox {
+    font-weight: bold;
+    border: 1px solid #555555;
+    border-radius: 8px;
+    margin-top: 1ex;
+    background-color: #363636;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 5px 0 5px;
+    color: #4fc3f7;
+}
+
+QPushButton {
+    background-color: #4a4a4a;
+    border: 1px solid #666666;
+    border-radius: 4px;
+    padding: 6px 12px;
+    color: #ffffff;
+    font-weight: bold;
+}
+
+QPushButton:hover {
+    background-color: #5a5a5a;
+    border: 1px solid #4fc3f7;
+}
+
+QPushButton:pressed {
+    background-color: #3a3a3a;
+}
+
+QPushButton:disabled {
+    background-color: #3a3a3a;
+    color: #888888;
+    border: 1px solid #555555;
+}
+
+QComboBox {
+    background-color: #4a4a4a;
+    border: 1px solid #666666;
+    border-radius: 4px;
+    padding: 4px;
+    color: #ffffff;
+}
+
+QComboBox::drop-down {
+    border: none;
+}
+
+QComboBox QAbstractItemView {
+    background-color: #363636;
+    border: 1px solid #4fc3f7;
+    selection-background-color: #4fc3f7;
+    selection-color: #000000;
+}
+
+QSlider::groove:horizontal {
+    border: 1px solid #999999;
+    height: 8px;
+    background: #4a4a4a;
+    margin: 2px 0;
+    border-radius: 4px;
+}
+
+QSlider::handle:horizontal {
+    background: #4fc3f7;
+    border: 1px solid #2196f3;
+    width: 18px;
+    margin: -2px 0;
+    border-radius: 3px;
+}
+
+QSlider::sub-page:horizontal {
+    background: #2196f3;
+    border-radius: 4px;
+}
+
+QTextEdit {
+    background-color: #2d2d2d;
+    border: 1px solid #555555;
+    border-radius: 4px;
+    color: #ffffff;
+    selection-background-color: #4fc3f7;
+    selection-color: #000000;
+}
+
+QLabel {
+    color: #ffffff;
+}
+
+QProgressBar {
+    border: 1px solid #555555;
+    border-radius: 4px;
+    text-align: center;
+    background-color: #4a4a4a;
+}
+
+QProgressBar::chunk {
+    background-color: #2196f3;
+    border-radius: 3px;
+}
+
+QStatusBar {
+    background-color: #232323;
+    color: #aaaaaa;
+}
+
+QToolBar {
+    background-color: #363636;
+    border: none;
+}
+
+QMenuBar {
+    background-color: #232323;
+    color: #ffffff;
+}
+
+QMenuBar::item {
+    background: transparent;
+}
+
+QMenuBar::item:selected {
+    background: #4a4a4a;
+}
+
+QMenuBar::item:pressed {
+    background: #5a5a5a;
+}
+
+QMenu {
+    background-color: #363636;
+    border: 1px solid #555555;
+    color: #ffffff;
+}
+
+QMenu::item {
+    padding: 4px 20px;
+}
+
+QMenu::item:selected {
+    background-color: #4fc3f7;
+    color: #000000;
+}
+
+QTabWidget::pane {
+    border: 1px solid #555555;
+    border-radius: 4px;
+}
+
+QTabBar::tab {
+    background: #4a4a4a;
+    border: 1px solid #666666;
+    border-bottom-color: #555555;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    min-width: 8ex;
+    padding: 4px;
+    color: #ffffff;
+}
+
+QTabBar::tab:selected {
+    background: #2196f3;
+    border-color: #4fc3f7;
+}
+
+QTabBar::tab:hover:!selected {
+    background: #5a5a5a;
+}
+
+QDialog {
+    background-color: #2b2b2b;
+    color: #ffffff;
+}
+
+QLineEdit {
+    background-color: #4a4a4a;
+    border: 1px solid #666666;
+    border-radius: 4px;
+    padding: 4px;
+    color: #ffffff;
+}
+
+QTableWidget {
+    background-color: #2d2d2d;
+    alternate-background-color: #363636;
+    gridline-color: #555555;
+    color: #ffffff;
+    selection-background-color: #4fc3f7;
+    selection-color: #000000;
+}
+
+QHeaderView::section {
+    background-color: #363636;
+    color: #4fc3f7;
+    padding: 4px;
+    border: 1px solid #555555;
+}
+
+QListWidget {
+    background-color: #2d2d2d;
+    border: 1px solid #555555;
+    border-radius: 4px;
+    color: #ffffff;
+}
+
+QListWidget::item {
+    padding: 4px;
+}
+
+QListWidget::item:selected {
+    background-color: #4fc3f7;
+    color: #000000;
+}
+
+QScrollBar:vertical {
+    background: #363636;
+    width: 15px;
+    margin: 15px 0 15px 0;
+    border: 1px solid #555555;
+    border-radius: 4px;
+}
+
+QScrollBar::handle:vertical {
+    background: #5a5a5a;
+    min-height: 20px;
+    border-radius: 4px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: #6a6a6a;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 14px;
+    background: #363636;
+    subcontrol-origin: margin;
+    border: 1px solid #555555;
+}
+
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+    background: none;
+}
+"""
+
+@dataclass
+class TextSegment:
+    """文本片段类，用于存储文本片段的TTS属性"""
+    start_pos: int
+    end_pos: int
+    voice: str = "zh-CN-XiaoxiaoNeural"
+    rate: int = 0
+    volume: int = 0
+    speaker_name: str = "旁白"
+    pitch: int = 0  # 新增音调控制
+    
+    def to_dict(self):
+        return asdict(self)
+    
+    @classmethod
+    def from_dict(cls, data):
+        return cls(**data)
+
+
+class TTSWorker(QThread):
+    """TTS工作线程，用于在后台执行TTS转换"""
+    finished = pyqtSignal(str)  # 完成信号，传递音频文件路径
+    error = pyqtSignal(str)     # 错误信号
+    progress = pyqtSignal(int)  # 进度信号
+
+    def __init__(self, text, voice, rate, volume, pitch=0):
+        super().__init__()
+        self.text = text
+        self.voice = voice
+        self.rate = rate
+        self.volume = volume
+        self.pitch = pitch
+
+    def run(self):
+        try:
+            # 在线程中运行异步任务
+            asyncio.run(self._async_tts())
+        except Exception as e:
+            self.error.emit(str(e))
+
+    async def _async_tts(self):
+        try:
+            # 创建临时文件
+            temp_file = tempfile.NamedTemporaryFile(suffix='.mp3', delete=False)
+            temp_file.close()
+            
+            # 设置语速、音量和音调
+            rate_str = f"{self.rate:+d}%" if self.rate >= 0 else f"{self.rate:+d}%"
+            volume_str = f"{self.volume:+d}%" if self.volume >= 0 else f"{self.volume:+d}%"
+            pitch_str = f"{self.pitch:+d}Hz" if self.pitch >= 0 else f"{self.pitch:+d}Hz"
+            
+            # 执行TTS转换，添加429缓冲时间处理
+            max_retries = 3
+            retry_delay = 0.2  # 初始延迟0.2秒
+            
+            for attempt in range(max_retries):
+                try:
+                    communicate = edge_tts.Communicate(
+                        self.text, 
+                        self.voice,
+                        rate=rate_str,
+                        volume=volume_str,
+                        pitch=pitch_str
+                    )
+                    
+                    # 获取总文本长度用于进度计算
+                    total_chars = len(self.text)
+                    processed_chars = 0
+                    
+                    async for chunk in communicate.stream():
+                        if chunk["type"] == "audio":
+                            with open(temp_file.name, "ab") as f:
+                                f.write(chunk["data"])
+                        elif chunk["type"] == "WordBoundary":
+                            processed_chars = chunk["offset"] + chunk["duration"]
+                            if total_chars > 0:
+                                progress = min(int((processed_chars / total_chars) * 100), 100)
+                                self.progress.emit(progress)
+                    
+                    self.finished.emit(temp_file.name)
+                    return  # 成功完成，退出重试循环
+                    
+                except Exception as e:
+                    if "429" in str(e) and attempt < max_retries - 1:
+                        # 遇到429错误，等待缓冲时间后重试
+                        import random
+                        delay = random.uniform(0.2, 1.5)  # 0.2~1.5秒随机延迟
+                        await asyncio.sleep(delay)
+                        continue
+                    else:
+                        raise e  # 非429错误或达到最大重试次数，重新抛出异常
+                        
+        except Exception as e:
+            self.error.emit(str(e))
+
+
+class MultiSpeakerTTSWorker(QThread):
+    """多人对话TTS工作线程，支持并发合成和音频合并"""
+    finished = pyqtSignal(str)  # 完成信号，传递合并后的音频文件路径
+    error = pyqtSignal(str)     # 错误信号
+    progress = pyqtSignal(int)  # 总体进度信号
+
+    def __init__(self, text, text_segments, default_voice, default_rate, default_volume, default_pitch=0, concurrency=3):
+        super().__init__()
+        self.text = text
+        self.text_segments = text_segments
+        self.default_voice = default_voice
+        self.default_rate = default_rate
+        self.default_volume = default_volume
+        self.default_pitch = default_pitch
+        self.concurrency = concurrency
+        self.temp_files = []
+
+    def run(self):
+        try:
+            # 在线程中运行异步任务
+            result = asyncio.run(self._async_multi_tts())
+            self.finished.emit(result)
+        except Exception as e:
+            # 清理临时文件
+            self._cleanup_temp_files()
+            self.error.emit(str(e))
+
+    def _cleanup_temp_files(self):
+        """清理临时文件"""
+        for temp_file in self.temp_files:
+            try:
+                if os.path.exists(temp_file):
+                    os.unlink(temp_file)
+            except:
+                pass
+        self.temp_files = []
+
+    async def _async_multi_tts(self):
+        """异步多人对话TTS合成"""
+        try:
+            # 1. 根据文本片段属性进行分段
+            segments = self._split_text_by_segments()
+            
+            # 2. 并发合成各个片段
+            audio_files = await self._concurrent_synthesis(segments)
+            
+            # 3. 合并音频文件
+            merged_file = self._merge_audio_files(audio_files)
+            
+            # 4. 清理临时文件（除了最终合并的文件）
+            for audio_file in audio_files:
+                try:
+                    if os.path.exists(audio_file) and audio_file != merged_file:
+                        os.unlink(audio_file)
+                except:
+                    pass
+            
+            return merged_file
+        except Exception as e:
+            raise e
+
+    def _split_text_by_segments(self):
+        """根据文本片段属性进行分段"""
+        if not self.text_segments:
+            # 如果没有自定义片段，使用默认设置
+            return [{
+                'text': self.text,
+                'voice': self.default_voice,
+                'rate': self.default_rate,
+                'volume': self.default_volume,
+                'pitch': self.default_pitch,
+                'speaker_name': '旁白'
+            }]
+        
+        # 按起始位置排序片段
+        sorted_segments = sorted(self.text_segments, key=lambda x: x.start_pos)
+        
+        segments = []
+        last_end = 0
+        
+        # 处理每个片段
+        for segment in sorted_segments:
+            # 添加片段前的默认文本
+            if segment.start_pos > last_end:
+                default_text = self.text[last_end:segment.start_pos]
+                if default_text.strip():
+                    segments.append({
+                        'text': default_text,
+                        'voice': self.default_voice,
+                        'rate': self.default_rate,
+                        'volume': self.default_volume,
+                        'pitch': self.default_pitch,
+                        'speaker_name': '旁白'
+                    })
+            
+            # 添加自定义片段
+            segment_text = self.text[segment.start_pos:segment.end_pos]
+            if segment_text.strip():
+                segments.append({
+                    'text': segment_text,
+                    'voice': segment.voice,
+                    'rate': segment.rate,
+                    'volume': segment.volume,
+                    'pitch': segment.pitch,
+                    'speaker_name': segment.speaker_name
+                })
+            
+            last_end = segment.end_pos
+        
+        # 添加最后的默认文本
+        if last_end < len(self.text):
+            remaining_text = self.text[last_end:]
+            if remaining_text.strip():
+                segments.append({
+                    'text': remaining_text,
+                    'voice': self.default_voice,
+                    'rate': self.default_rate,
+                    'volume': self.default_volume,
+                    'pitch': self.default_pitch,
+                    'speaker_name': '旁白'
+                })
+        
+        return segments
+
+    async def _concurrent_synthesis(self, segments):
+        """并发合成多个片段"""
+        semaphore = asyncio.Semaphore(self.concurrency)
+        tasks = []
+        
+        for i, segment in enumerate(segments):
+            task = self._synthesize_segment_with_semaphore(semaphore, segment, i)
+            tasks.append(task)
+        
+        # 等待所有任务完成
+        audio_files = await asyncio.gather(*tasks)
+        return audio_files
+
+    async def _synthesize_segment_with_semaphore(self, semaphore, segment, index):
+        """使用信号量控制并发的片段合成"""
+        async with semaphore:
+            return await self._synthesize_single_segment(segment, index)
+
+    async def _synthesize_single_segment(self, segment, index):
+        """合成单个片段"""
+        try:
+            # 创建临时文件
+            temp_file = tempfile.NamedTemporaryFile(suffix='.mp3', delete=False)
+            temp_file.close()
+            self.temp_files.append(temp_file.name)
+            
+            # 设置语速、音量和音调
+            rate_str = f"{segment['rate']:+d}%" if segment['rate'] >= 0 else f"{segment['rate']:+d}%"
+            volume_str = f"{segment['volume']:+d}%" if segment['volume'] >= 0 else f"{segment['volume']:+d}%"
+            pitch_str = f"{segment['pitch']:+d}Hz" if segment['pitch'] >= 0 else f"{segment['pitch']:+d}Hz"
+            
+            # 执行TTS转换，添加429缓冲时间处理
+            max_retries = 3
+            
+            for attempt in range(max_retries):
+                try:
+                    communicate = edge_tts.Communicate(
+                        segment['text'], 
+                        segment['voice'],
+                        rate=rate_str,
+                        volume=volume_str,
+                        pitch=pitch_str
+                    )
+                    
+                    # 写入音频数据
+                    async for chunk in communicate.stream():
+                        if chunk["type"] == "audio":
+                            with open(temp_file.name, "ab") as f:
+                                f.write(chunk["data"])
+                    
+                    return temp_file.name  # 成功完成，退出重试循环
+                    
+                except Exception as e:
+                    if "429" in str(e) and attempt < max_retries - 1:
+                        # 遇到429错误，等待缓冲时间后重试
+                        import random
+                        delay = random.uniform(0.2, 1.5)  # 0.2~1.5秒随机延迟
+                        await asyncio.sleep(delay)
+                        continue
+                    else:
+                        raise Exception(f"合成片段 {index} 失败: {str(e)}")  # 非429错误或达到最大重试次数，重新抛出异常
+                        
+        except Exception as e:
+            raise Exception(f"合成片段 {index} 失败: {str(e)}")
+
+    def _merge_audio_files(self, audio_files):
+        """合并音频文件"""
+        if not audio_files:
+            raise Exception("没有音频文件需要合并")
+        
+        if len(audio_files) == 1:
+            return audio_files[0]
+        
+        # 创建最终的临时文件
+        final_temp_file = tempfile.NamedTemporaryFile(suffix='.mp3', delete=False)
+        final_temp_file.close()
+        
+        try:
+            # 顺序合并所有音频文件
+            with open(final_temp_file.name, 'wb') as outfile:
+                for audio_file in audio_files:
+                    if os.path.exists(audio_file):
+                        with open(audio_file, 'rb') as infile:
+                            outfile.write(infile.read())
+            
+            return final_temp_file.name
+        except Exception as e:
+            # 清理创建的文件
+            try:
+                if os.path.exists(final_temp_file.name):
+                    os.unlink(final_temp_file.name)
+            except:
+                pass
+            raise Exception(f"合并音频文件失败: {str(e)}")
+
+
+class SegmentManager(QDialog):
+    """文本片段管理器对话框"""
+    def __init__(self, segments, parent=None):
+        super().__init__(parent)
+        self.segments = segments
+        self.init_ui()
+        
+    def init_ui(self):
+        self.setWindowTitle("文本片段管理")
+        self.setModal(True)
+        self.resize(600, 400)
+        
+        layout = QVBoxLayout()
+        
+        # 创建表格显示片段
+        self.table = QTableWidget()
+        self.table.setColumnCount(6)
+        self.table.setHorizontalHeaderLabels(["发声人", "语音", "语速", "音量", "音调", "操作"])
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        layout.addWidget(self.table)
+        
+        # 按钮布局
+        btn_layout = QHBoxLayout()
+        self.delete_btn = QPushButton("删除选中")
+        self.delete_btn.clicked.connect(self.delete_selected)
+        self.clear_btn = QPushButton("清空所有")
+        self.clear_btn.clicked.connect(self.clear_all)
+        self.close_btn = QPushButton("关闭")
+        self.close_btn.clicked.connect(self.accept)
+        
+        btn_layout.addWidget(self.delete_btn)
+        btn_layout.addWidget(self.clear_btn)
+        btn_layout.addStretch()
+        btn_layout.addWidget(self.close_btn)
+        layout.addLayout(btn_layout)
+        
+        self.setLayout(layout)
+        self.refresh_table()
+        
+    def refresh_table(self):
+        self.table.setRowCount(len(self.segments))
+        for i, segment in enumerate(self.segments):
+            self.table.setItem(i, 0, QTableWidgetItem(segment.speaker_name))
+            self.table.setItem(i, 1, QTableWidgetItem(segment.voice))
+            self.table.setItem(i, 2, QTableWidgetItem(f"{segment.rate:+d}%"))
+            self.table.setItem(i, 3, QTableWidgetItem(f"{segment.volume:+d}%"))
+            self.table.setItem(i, 4, QTableWidgetItem(f"{segment.pitch:+d}Hz"))
+            
+            # 操作按钮
+            delete_btn = QPushButton("删除")
+            delete_btn.clicked.connect(lambda checked, idx=i: self.delete_segment(idx))
+            self.table.setCellWidget(i, 5, delete_btn)
+            
+    def delete_segment(self, index):
+        if 0 <= index < len(self.segments):
+            del self.segments[index]
+            self.refresh_table()
+            
+    def delete_selected(self):
+        selected_rows = set()
+        for item in self.table.selectedItems():
+            selected_rows.add(item.row())
+            
+        # 从后往前删除，避免索引变化
+        for row in sorted(selected_rows, reverse=True):
+            if 0 <= row < len(self.segments):
+                del self.segments[row]
+                
+        self.refresh_table()
+        
+    def clear_all(self):
+        self.segments.clear()
+        self.refresh_table()
+
+
+class TTSStudio(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.audio_file = None
+        self.player = None
+        self.tts_worker = None
+        self.text_segments: List[TextSegment] = []
+        self.default_voice = "zh-CN-XiaoxiaoNeural"
+        self.default_rate = 0
+        self.default_volume = 0
+        self.default_pitch = 0
+        self.default_speaker = "旁白"
+        self.project_file = None  # 当前项目文件路径
+        self.creator_name = "IWZ TTS Studio"  # 默认创建者名称
+        self.setup_ui()
+        self.setup_voices()
+        self.setup_context_menu()
+        self.setup_toolbar()
+        self.setup_status_bar()
+        self.setup_shortcuts()
+        
+        # 应用样式表
+        self.setStyleSheet(STYLESHEET)
+        
+    def setup_ui(self):
+        """设置用户界面"""
+        self.setWindowTitle("IWZ TTS Studio - Edge TTS 语音合成系统")
+        self.setGeometry(100, 100, 1000, 800)
+        self.setMinimumSize(800, 600)
+        
+        # 设置窗口图标
+        icon_path = os.path.join(os.path.dirname(__file__), "icon.ico")
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
+        
+        # 创建中央部件
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        
+        # 创建主布局
+        main_layout = QVBoxLayout()
+        central_widget.setLayout(main_layout)
+        
+        # 创建分割器
+        splitter = QSplitter(Qt.Orientation.Vertical)
+        main_layout.addWidget(splitter)
+        
+        # 文本输入区域
+        text_group = QGroupBox("文本输入 (右键设置不同发声人)")
+        text_layout = QVBoxLayout()
+        self.text_edit = QTextEdit()
+        self.text_edit.setPlaceholderText("请输入要转换为语音的文本...\n支持多人对话：选中文本 -> 右键 -> 设置TTS属性")
+        font = QFont("Microsoft YaHei", 11)
+        self.text_edit.setFont(font)
+        # 启用右键菜单
+        self.text_edit.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.text_edit.customContextMenuRequested.connect(self.show_context_menu)
+        text_layout.addWidget(self.text_edit)
+        text_group.setLayout(text_layout)
+        splitter.addWidget(text_group)
+        
+        # 控制面板
+        control_group = QGroupBox("语音设置")
+        control_layout = QVBoxLayout()
+        
+        # 创建选项卡
+        tab_widget = QTabWidget()
+        
+        # 基本设置选项卡
+        basic_tab = QWidget()
+        basic_layout = QVBoxLayout()
+        
+        # 默认语音选择
+        default_voice_layout = QHBoxLayout()
+        default_voice_layout.addWidget(QLabel("默认语音:"))
+        self.default_voice_combo = QComboBox()
+        self.default_voice_combo.setMinimumWidth(250)
+        default_voice_layout.addWidget(self.default_voice_combo)
+        default_voice_layout.addStretch()
+        basic_layout.addLayout(default_voice_layout)
+        
+        # 默认语速控制
+        default_rate_layout = QHBoxLayout()
+        default_rate_layout.addWidget(QLabel("默认语速:"))
+        self.default_rate_slider = QSlider(Qt.Orientation.Horizontal)
+        self.default_rate_slider.setRange(-50, 100)
+        self.default_rate_slider.setValue(0)
+        self.default_rate_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.default_rate_slider.setTickInterval(10)
+        self.default_rate_label = QLabel("0%")
+        default_rate_layout.addWidget(self.default_rate_slider)
+        default_rate_layout.addWidget(self.default_rate_label)
+        basic_layout.addLayout(default_rate_layout)
+        
+        # 默认音量控制
+        default_volume_layout = QHBoxLayout()
+        default_volume_layout.addWidget(QLabel("默认音量:"))
+        self.default_volume_slider = QSlider(Qt.Orientation.Horizontal)
+        self.default_volume_slider.setRange(-50, 50)
+        self.default_volume_slider.setValue(0)
+        self.default_volume_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.default_volume_slider.setTickInterval(10)
+        self.default_volume_label = QLabel("0%")
+        default_volume_layout.addWidget(self.default_volume_slider)
+        default_volume_layout.addWidget(self.default_volume_label)
+        basic_layout.addLayout(default_volume_layout)
+        
+        # 默认音调控制
+        default_pitch_layout = QHBoxLayout()
+        default_pitch_layout.addWidget(QLabel("默认音调:"))
+        self.default_pitch_slider = QSlider(Qt.Orientation.Horizontal)
+        self.default_pitch_slider.setRange(-50, 50)
+        self.default_pitch_slider.setValue(0)
+        self.default_pitch_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.default_pitch_slider.setTickInterval(10)
+        self.default_pitch_label = QLabel("0Hz")
+        default_pitch_layout.addWidget(self.default_pitch_slider)
+        default_pitch_layout.addWidget(self.default_pitch_label)
+        basic_layout.addLayout(default_pitch_layout)
+        
+        basic_tab.setLayout(basic_layout)
+        tab_widget.addTab(basic_tab, "基本设置")
+        
+        # 高级设置选项卡
+        advanced_tab = QWidget()
+        advanced_layout = QVBoxLayout()
+        
+        # 并发数设置
+        concurrency_layout = QHBoxLayout()
+        concurrency_layout.addWidget(QLabel("并发数:"))
+        self.concurrency_slider = QSlider(Qt.Orientation.Horizontal)
+        self.concurrency_slider.setRange(1, 10)
+        self.concurrency_slider.setValue(3)
+        self.concurrency_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.concurrency_slider.setTickInterval(1)
+        self.concurrency_label = QLabel("3")
+        self.concurrency_slider.valueChanged.connect(lambda v: self.concurrency_label.setText(str(v)))
+        concurrency_layout.addWidget(self.concurrency_slider)
+        concurrency_layout.addWidget(self.concurrency_label)
+        advanced_layout.addLayout(concurrency_layout)
+        
+        # 音频质量设置
+        quality_layout = QHBoxLayout()
+        quality_layout.addWidget(QLabel("音频质量:"))
+        self.quality_combo = QComboBox()
+        self.quality_combo.addItems(["标准", "高", "超高"])
+        quality_layout.addWidget(self.quality_combo)
+        quality_layout.addStretch()
+        advanced_layout.addLayout(quality_layout)
+        
+        # 输出格式设置
+        format_layout = QHBoxLayout()
+        format_layout.addWidget(QLabel("输出格式:"))
+        self.format_combo = QComboBox()
+        self.format_combo.addItems(["MP3", "WAV", "AAC"])
+        format_layout.addWidget(self.format_combo)
+        format_layout.addStretch()
+        advanced_layout.addLayout(format_layout)
+        
+        advanced_tab.setLayout(advanced_layout)
+        tab_widget.addTab(advanced_tab, "高级设置")
+        
+        control_layout.addWidget(tab_widget)
+        
+        # 按钮布局
+        button_layout = QHBoxLayout()
+        
+        self.convert_btn = QPushButton("转换为语音")
+        self.convert_btn.clicked.connect(self.convert_text)
+        self.play_btn = QPushButton("播放")
+        self.play_btn.clicked.connect(self.play_audio)
+        self.play_btn.setEnabled(False)
+        self.stop_btn = QPushButton("停止")
+        self.stop_btn.clicked.connect(self.stop_audio)
+        self.stop_btn.setEnabled(False)
+        self.save_btn = QPushButton("保存音频")
+        self.save_btn.clicked.connect(self.save_audio)
+        self.save_btn.setEnabled(False)
+        
+        button_layout.addWidget(self.convert_btn)
+        button_layout.addWidget(self.play_btn)
+        button_layout.addWidget(self.stop_btn)
+        button_layout.addWidget(self.save_btn)
+        control_layout.addLayout(button_layout)
+        
+        # 进度条
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setVisible(False)
+        control_layout.addWidget(self.progress_bar)
+        
+        control_group.setLayout(control_layout)
+        splitter.addWidget(control_group)
+        
+        # 设置分割器比例
+        splitter.setSizes([400, 300])
+        
+        # 事件连接
+        self.default_rate_slider.valueChanged.connect(self.update_default_rate_label)
+        self.default_volume_slider.valueChanged.connect(self.update_default_volume_label)
+        self.default_pitch_slider.valueChanged.connect(self.update_default_pitch_label)
+        
+    def setup_toolbar(self):
+        """设置工具栏"""
+        toolbar = QToolBar("主工具栏")
+        toolbar.setIconSize(QSize(24, 24))
+        self.addToolBar(Qt.ToolBarArea.TopToolBarArea, toolbar)
+        
+        # 新建
+        new_action = QAction("新建", self)
+        new_action.triggered.connect(self.new_file)
+        toolbar.addAction(new_action)
+        
+        # 打开
+        open_action = QAction("打开", self)
+        open_action.triggered.connect(self.open_file)
+        toolbar.addAction(open_action)
+        
+        # 保存
+        save_action = QAction("保存", self)
+        save_action.triggered.connect(self.save_file)
+        toolbar.addAction(save_action)
+        
+        # 另存为
+        save_as_action = QAction("另存为", self)
+        save_as_action.triggered.connect(self.save_as_file)
+        toolbar.addAction(save_as_action)
+        
+        toolbar.addSeparator()
+        
+        # 片段管理
+        segment_action = QAction("片段管理", self)
+        segment_action.triggered.connect(self.manage_segments)
+        toolbar.addAction(segment_action)
+        
+        # 预览
+        preview_action = QAction("预览", self)
+        preview_action.triggered.connect(self.preview_text)
+        toolbar.addAction(preview_action)
+        
+        toolbar.addSeparator()
+        
+        # 关于
+        about_action = QAction("关于", self)
+        about_action.triggered.connect(self.show_about)
+        toolbar.addAction(about_action)
+        
+    def setup_status_bar(self):
+        """设置状态栏"""
+        self.status_bar = QStatusBar()
+        self.setStatusBar(self.status_bar)
+        self.status_bar.showMessage("就绪")
+        
+    def setup_shortcuts(self):
+        """设置快捷键"""
+        # Ctrl+N - 新建
+        new_shortcut = QAction(self)
+        new_shortcut.setShortcut(QKeySequence("Ctrl+N"))
+        new_shortcut.triggered.connect(self.new_file)
+        self.addAction(new_shortcut)
+        
+        # Ctrl+O - 打开
+        open_shortcut = QAction(self)
+        open_shortcut.setShortcut(QKeySequence("Ctrl+O"))
+        open_shortcut.triggered.connect(self.open_file)
+        self.addAction(open_shortcut)
+        
+        # Ctrl+S - 保存
+        save_shortcut = QAction(self)
+        save_shortcut.setShortcut(QKeySequence("Ctrl+S"))
+        save_shortcut.triggered.connect(self.save_file)
+        self.addAction(save_shortcut)
+        
+        # Ctrl+Shift+S - 另存为
+        save_as_shortcut = QAction(self)
+        save_as_shortcut.setShortcut(QKeySequence("Ctrl+Shift+S"))
+        save_as_shortcut.triggered.connect(self.save_as_file)
+        self.addAction(save_as_shortcut)
+        
+        # Ctrl+R - 转换
+        convert_shortcut = QAction(self)
+        convert_shortcut.setShortcut(QKeySequence("Ctrl+R"))
+        convert_shortcut.triggered.connect(self.convert_text)
+        self.addAction(convert_shortcut)
+        
+        # Ctrl+P - 播放
+        play_shortcut = QAction(self)
+        play_shortcut.setShortcut(QKeySequence("Ctrl+P"))
+        play_shortcut.triggered.connect(self.play_audio)
+        self.addAction(play_shortcut)
+        
+    def new_file(self):
+        """新建文件"""
+        reply = QMessageBox.question(self, "确认", "确定要新建文件吗？未保存的内容将丢失。", 
+                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            self.text_edit.clear()
+            self.text_segments.clear()
+            self.project_file = None
+            self.setWindowTitle("IWZ TTS Studio - Edge TTS 语音合成系统")
+            self.status_bar.showMessage("已新建文件")
+            
+    def open_file(self):
+        """打开文件"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "打开文件", "", "IWZ TTS项目文件 (*.iwztts);;TTS项目文件 (*.tts);;文本文件 (*.txt);;所有文件 (*)"
+        )
+        
+        if file_path:
+            try:
+                if file_path.endswith('.iwztts') or file_path.endswith('.tts'):
+                    self.load_project_file(file_path)
+                else:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                        self.text_edit.setPlainText(content)
+                    self.project_file = None
+                    self.setWindowTitle(f"IWZ TTS Studio - {os.path.basename(file_path)}")
+                self.status_bar.showMessage(f"已打开文件: {file_path}")
+            except Exception as e:
+                QMessageBox.critical(self, "错误", f"打开文件失败：{str(e)}")
+                
+    def save_file(self):
+        """保存文件"""
+        if self.project_file:
+            self.save_project_file(self.project_file)
+        else:
+            self.save_as_file()
+            
+    def save_as_file(self):
+        """另存为文件"""
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "保存文件", "", "TTS项目文件 (*.iwztts);;文本文件 (*.txt);;所有文件 (*)"
+        )
+        
+        if file_path:
+            try:
+                if file_path.endswith('.iwztts'):
+                    self.save_project_file(file_path)
+                else:
+                    text = self.text_edit.toPlainText()
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        f.write(text)
+                    self.setWindowTitle(f"IWZ TTS Studio - {os.path.basename(file_path)}")
+                self.status_bar.showMessage(f"文件已保存: {file_path}")
+            except Exception as e:
+                QMessageBox.critical(self, "错误", f"保存文件失败：{str(e)}")
+                
+    def save_project_file(self, file_path):
+        """保存项目文件（包含所有信息）"""
+        try:
+            # 确保文件扩展名为.iwztts
+            if not file_path.endswith('.iwztts'):
+                file_path = file_path.rsplit('.', 1)[0] + '.iwztts'
+            
+            # 获取或设置creator
+            creator = self.get_creator_name()
+            
+            project_data = {
+                'creator': creator,
+                'version': '1.0',
+                'text': self.text_edit.toPlainText(),
+                'segments': [segment.to_dict() for segment in self.text_segments],
+                'default_voice': self.default_voice_combo.currentData(),
+                'default_rate': self.default_rate_slider.value(),
+                'default_volume': self.default_volume_slider.value(),
+                'default_pitch': self.default_pitch_slider.value(),
+                'concurrency': self.concurrency_slider.value(),
+                'quality': self.quality_combo.currentText(),
+                'format': self.format_combo.currentText()
+            }
+            
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(project_data, f, ensure_ascii=False, indent=2)
+                
+            self.project_file = file_path
+            self.setWindowTitle(f"IWZ TTS Studio - {os.path.basename(file_path)}")
+        except Exception as e:
+            raise Exception(f"保存项目文件失败：{str(e)}")
+            
+    def load_project_file(self, file_path):
+        """加载项目文件"""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                project_data = json.load(f)
+                
+            # 恢复文本内容
+            self.text_edit.setPlainText(project_data.get('text', ''))
+            
+            # 恢复文本片段
+            self.text_segments = []
+            for segment_data in project_data.get('segments', []):
+                self.text_segments.append(TextSegment.from_dict(segment_data))
+                
+            # 恢复默认设置
+            voice_data = project_data.get('default_voice', 'zh-CN-XiaoxiaoNeural')
+            voice_index = self.default_voice_combo.findData(voice_data)
+            if voice_index >= 0:
+                self.default_voice_combo.setCurrentIndex(voice_index)
+                
+            self.default_rate_slider.setValue(project_data.get('default_rate', 0))
+            self.default_volume_slider.setValue(project_data.get('default_volume', 0))
+            self.default_pitch_slider.setValue(project_data.get('default_pitch', 0))
+            self.concurrency_slider.setValue(project_data.get('concurrency', 3))
+            
+            # 恢复其他设置
+            quality = project_data.get('quality', '标准')
+            quality_index = self.quality_combo.findText(quality)
+            if quality_index >= 0:
+                self.quality_combo.setCurrentIndex(quality_index)
+                
+            format_type = project_data.get('format', 'MP3')
+            format_index = self.format_combo.findText(format_type)
+            if format_index >= 0:
+                self.format_combo.setCurrentIndex(format_index)
+                
+            self.project_file = file_path
+            self.setWindowTitle(f"IWZ TTS Studio - {os.path.basename(file_path)}")
+            
+            # 刷新高亮显示
+            self.refresh_text_highlighting()
+            
+        except Exception as e:
+            raise Exception(f"加载项目文件失败：{str(e)}")
+        
+    def manage_segments(self):
+        """管理文本片段"""
+        dialog = SegmentManager(self.text_segments, self)
+        dialog.exec()
+        self.refresh_text_highlighting()
+        
+    def preview_text(self):
+        """预览文本"""
+        text = self.text_edit.toPlainText()
+        if not text.strip():
+            QMessageBox.warning(self, "警告", "没有文本可预览！")
+            return
+            
+        preview_dialog = QDialog(self)
+        preview_dialog.setWindowTitle("文本预览")
+        preview_dialog.resize(500, 400)
+        
+        layout = QVBoxLayout()
+        preview_text = QTextEdit()
+        preview_text.setPlainText(text)
+        preview_text.setReadOnly(True)
+        layout.addWidget(preview_text)
+        
+        close_btn = QPushButton("关闭")
+        close_btn.clicked.connect(preview_dialog.accept)
+        layout.addWidget(close_btn)
+        
+        preview_dialog.setLayout(layout)
+        preview_dialog.exec()
+        
+    def setup_voices(self):
+        """设置语音选项"""
+        # 中文语音
+        chinese_voices = [
+            ("zh-CN-XiaoxiaoNeural", "晓晓 (女)"),
+            ("zh-CN-YunyangNeural", "云扬 (男)"),
+            ("zh-CN-XiaochenNeural", "晓晨 (女)"),
+            ("zh-CN-XiaohanNeural", "晓涵 (女)"),
+            ("zh-CN-XiaomengNeural", "晓梦 (女)"),
+            ("zh-CN-XiaomoNeural", "晓墨 (女)"),
+            ("zh-CN-XiaoqiuNeural", "晓秋 (女)"),
+            ("zh-CN-XiaoruiNeural", "晓睿 (女)"),
+            ("zh-CN-XiaoshuangNeural", "晓双 (女)"),
+            ("zh-CN-XiaoxuanNeural", "晓萱 (女)"),
+            ("zh-CN-XiaoyanNeural", "晓颜 (女)"),
+            ("zh-CN-XiaoyiNeural", "晓伊 (女)"),
+            ("zh-CN-XiaozhenNeural", "晓甄 (女)"),
+            ("zh-CN-YunfengNeural", "云枫 (男)"),
+            ("zh-CN-YunhaoNeural", "云浩 (男)"),
+            ("zh-CN-YunjianNeural", "云健 (男)"),
+            ("zh-CN-YunxiaNeural", "云夏 (男)"),
+            ("zh-CN-YunxiNeural", "云希 (男)"),
+            ("zh-CN-YunyeNeural", "云野 (男)"),
+            ("zh-CN-YunzeNeural", "云泽 (男)"),
+        ]
+        
+        # 英文语音
+        english_voices = [
+            ("en-US-JennyNeural", "Jenny (女)"),
+            ("en-US-GuyNeural", "Guy (男)"),
+            ("en-US-AriaNeural", "Aria (女)"),
+            ("en-US-DavisNeural", "Davis (男)"),
+            ("en-US-AmberNeural", "Amber (女)"),
+            ("en-US-AnaNeural", "Ana (女)"),
+            ("en-US-AshleyNeural", "Ashley (女)"),
+            ("en-US-BrandonNeural", "Brandon (男)"),
+            ("en-US-ChristopherNeural", "Christopher (男)"),
+            ("en-US-CoraNeural", "Cora (女)"),
+        ]
+        
+        # 添加所有语音选项到默认和普通语音选择框
+        for voice_id, voice_name in chinese_voices + english_voices:
+            self.default_voice_combo.addItem(voice_name, voice_id)
+            # 为右键菜单创建语音映射
+            self.voice_combo = self.default_voice_combo  # 临时使用，实际会在右键菜单中重新创建
+            
+        # 为文本编辑器也添加语音选项（用于右键菜单）
+        self.text_edit_voices = chinese_voices + english_voices
+        
+        # 设置默认语音为中文晓晓
+        default_index = self.default_voice_combo.findData("zh-CN-XiaoxiaoNeural")
+        if default_index >= 0:
+            self.default_voice_combo.setCurrentIndex(default_index)
+    
+    def update_default_rate_label(self, value):
+        """更新默认语速标签"""
+        self.default_rate_label.setText(f"{value:+d}%")
+    
+    def update_default_volume_label(self, value):
+        """更新默认音量标签"""
+        self.default_volume_label.setText(f"{value:+d}%")
+        
+    def update_default_pitch_label(self, value):
+        """更新默认音调标签"""
+        self.default_pitch_label.setText(f"{value:+d}Hz")
+        
+    def setup_context_menu(self):
+        """设置右键菜单"""
+        pass
+        
+    def show_context_menu(self, position):
+        """显示右键菜单"""
+        menu = QMenu()
+        
+        # 设置TTS属性菜单项
+        set_tts_action = QAction("设置TTS属性", self)
+        set_tts_action.triggered.connect(self.set_selected_text_tts_properties)
+        menu.addAction(set_tts_action)
+        
+        # 清除TTS属性菜单项
+        clear_tts_action = QAction("清除TTS属性", self)
+        clear_tts_action.triggered.connect(self.clear_selected_text_tts_properties)
+        menu.addAction(clear_tts_action)
+        
+        # 如果有选中文本才显示菜单
+        cursor = self.text_edit.textCursor()
+        if cursor.hasSelection():
+            menu.exec(self.text_edit.mapToGlobal(position))
+    
+    def set_selected_text_tts_properties(self):
+        """设置选中文本的TTS属性"""
+        cursor = self.text_edit.textCursor()
+        if not cursor.hasSelection():
+            return
+            
+        # 创建属性设置对话框
+        dialog = QDialog(self)
+        dialog.setWindowTitle("设置TTS属性")
+        dialog.setModal(True)
+        dialog.resize(400, 300)
+        
+        layout = QFormLayout(dialog)
+        
+        # 发声人名称
+        speaker_name_edit = QLineEdit("发言者")
+        layout.addRow("发声人名称:", speaker_name_edit)
+        
+        # 语音选择
+        voice_combo = QComboBox()
+        for voice_id, voice_name in self.text_edit_voices:
+            voice_combo.addItem(voice_name, voice_id)
+        # 设置默认选中当前默认语音
+        current_voice = self.default_voice_combo.currentData()
+        current_index = voice_combo.findData(current_voice)
+        if current_index >= 0:
+            voice_combo.setCurrentIndex(current_index)
+        layout.addRow("语音:", voice_combo)
+        
+        # 语速
+        rate_slider = QSlider(Qt.Orientation.Horizontal)
+        rate_slider.setRange(-50, 100)
+        rate_slider.setValue(self.default_rate_slider.value())
+        rate_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        rate_slider.setTickInterval(10)
+        rate_label = QLabel(f"{self.default_rate_slider.value():+d}%")
+        rate_slider.valueChanged.connect(lambda v: rate_label.setText(f"{v:+d}%"))
+        
+        rate_layout = QHBoxLayout()
+        rate_layout.addWidget(rate_slider)
+        rate_layout.addWidget(rate_label)
+        layout.addRow("语速:", rate_layout)
+        
+        # 音量
+        volume_slider = QSlider(Qt.Orientation.Horizontal)
+        volume_slider.setRange(-50, 50)
+        volume_slider.setValue(self.default_volume_slider.value())
+        volume_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        volume_slider.setTickInterval(10)
+        volume_label = QLabel(f"{self.default_volume_slider.value():+d}%")
+        volume_slider.valueChanged.connect(lambda v: volume_label.setText(f"{v:+d}%"))
+        
+        volume_layout = QHBoxLayout()
+        volume_layout.addWidget(volume_slider)
+        volume_layout.addWidget(volume_label)
+        layout.addRow("音量:", volume_layout)
+        
+        # 音调
+        pitch_slider = QSlider(Qt.Orientation.Horizontal)
+        pitch_slider.setRange(-50, 50)
+        pitch_slider.setValue(self.default_pitch_slider.value())
+        pitch_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        pitch_slider.setTickInterval(10)
+        pitch_label = QLabel(f"{self.default_pitch_slider.value():+d}Hz")
+        pitch_slider.valueChanged.connect(lambda v: pitch_label.setText(f"{v:+d}Hz"))
+        
+        pitch_layout = QHBoxLayout()
+        pitch_layout.addWidget(pitch_slider)
+        pitch_layout.addWidget(pitch_label)
+        layout.addRow("音调:", pitch_layout)
+        
+        # 按钮
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addRow(button_box)
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # 创建文本片段
+            start_pos = cursor.selectionStart()
+            end_pos = cursor.selectionEnd()
+            
+            segment = TextSegment(
+                start_pos=start_pos,
+                end_pos=end_pos,
+                voice=voice_combo.currentData(),
+                rate=rate_slider.value(),
+                volume=volume_slider.value(),
+                pitch=pitch_slider.value(),
+                speaker_name=speaker_name_edit.text()
+            )
+            
+            # 添加到片段列表
+            self.text_segments.append(segment)
+            
+            # 高亮显示选中文本
+            self.refresh_text_highlighting()
+            
+            QMessageBox.information(self, "成功", f"已为选中文本设置TTS属性：{speaker_name_edit.text()}")
+    
+    def clear_selected_text_tts_properties(self):
+        """清除选中文本的TTS属性"""
+        cursor = self.text_edit.textCursor()
+        if not cursor.hasSelection():
+            return
+            
+        # 移除对应的文本片段
+        start_pos = cursor.selectionStart()
+        end_pos = cursor.selectionEnd()
+        
+        # 过滤掉被清除的片段
+        self.text_segments = [seg for seg in self.text_segments 
+                             if not (seg.start_pos >= start_pos and seg.end_pos <= end_pos)]
+        
+        # 刷新高亮显示
+        self.refresh_text_highlighting()
+        
+        QMessageBox.information(self, "成功", "已清除选中文本的TTS属性")
+        
+    def refresh_text_highlighting(self):
+        """刷新文本高亮显示"""
+        # 清除所有格式
+        cursor = self.text_edit.textCursor()
+        cursor.select(QTextCursor.SelectionType.Document)
+        format = QTextCharFormat()
+        format.clearBackground()
+        cursor.setCharFormat(format)
+        
+        # 重新应用高亮
+        for segment in self.text_segments:
+            cursor.setPosition(segment.start_pos)
+            cursor.setPosition(segment.end_pos, QTextCursor.MoveMode.KeepAnchor)
+            format = QTextCharFormat()
+            format.setBackground(QColor(255, 255, 0, 100))  # 半透明黄色背景
+            cursor.setCharFormat(format)
+    
+    def convert_text(self):
+        """转换文本为语音（支持多人对话）"""
+        text = self.text_edit.toPlainText().strip()
+        if not text:
+            QMessageBox.warning(self, "警告", "请输入要转换的文本！")
+            return
+        
+        # 禁用转换按钮，显示进度条
+        self.convert_btn.setEnabled(False)
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+        self.status_bar.showMessage("正在转换文本...")
+        
+        try:
+            # 如果有自定义片段，使用多人对话模式
+            if self.text_segments:
+                self.convert_multi_speaker_text(text)
+            else:
+                # 使用默认设置转换整个文本
+                voice = self.default_voice_combo.currentData()
+                rate = self.default_rate_slider.value()
+                volume = self.default_volume_slider.value()
+                pitch = self.default_pitch_slider.value()
+                
+                # 创建并启动TTS工作线程
+                self.tts_worker = TTSWorker(text, voice, rate, volume, pitch)
+                self.tts_worker.finished.connect(self.on_tts_finished)
+                self.tts_worker.error.connect(self.on_tts_error)
+                self.tts_worker.progress.connect(self.progress_bar.setValue)
+                self.tts_worker.start()
+        except Exception as e:
+            self.convert_btn.setEnabled(True)
+            self.progress_bar.setVisible(False)
+            QMessageBox.critical(self, "错误", f"语音转换失败：{str(e)}")
+    
+    def convert_multi_speaker_text(self, text):
+        """转换多人对话文本"""
+        # 使用多人对话模式转换文本
+        voice = self.default_voice_combo.currentData()
+        rate = self.default_rate_slider.value()
+        volume = self.default_volume_slider.value()
+        pitch = self.default_pitch_slider.value()
+        concurrency = self.concurrency_slider.value()
+        
+        # 创建并启动多人对话TTS工作线程
+        self.tts_worker = MultiSpeakerTTSWorker(
+            text, self.text_segments, voice, rate, volume, pitch, concurrency
+        )
+        self.tts_worker.finished.connect(self.on_tts_finished)
+        self.tts_worker.error.connect(self.on_tts_error)
+        self.tts_worker.progress.connect(self.progress_bar.setValue)
+        self.tts_worker.start()
+    
+    def on_tts_finished(self, audio_file):
+        """TTS转换完成"""
+        self.audio_file = audio_file
+        self.convert_btn.setEnabled(True)
+        self.progress_bar.setVisible(False)
+        self.play_btn.setEnabled(True)
+        self.save_btn.setEnabled(True)
+        self.status_bar.showMessage("语音转换完成")
+        QMessageBox.information(self, "成功", "语音转换完成！")
+    
+    def on_tts_error(self, error_msg):
+        """TTS转换错误"""
+        self.convert_btn.setEnabled(True)
+        self.progress_bar.setVisible(False)
+        self.status_bar.showMessage("转换失败")
+        QMessageBox.critical(self, "错误", f"语音转换失败：{error_msg}")
+    
+    def play_audio(self):
+        """播放音频"""
+        if not self.audio_file or not os.path.exists(self.audio_file):
+            QMessageBox.warning(self, "警告", "没有可播放的音频文件！")
+            return
+        
+        try:
+            # 初始化pygame mixer
+            if not pygame.mixer.get_init():
+                pygame.mixer.init()
+            
+            # 加载并播放音频
+            pygame.mixer.music.load(self.audio_file)
+            pygame.mixer.music.play()
+            
+            self.play_btn.setEnabled(False)
+            self.stop_btn.setEnabled(True)
+            self.status_bar.showMessage("正在播放音频...")
+            
+            # 监听播放结束
+            self.check_playback()
+            
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"播放音频失败：{str(e)}")
+    
+    def check_playback(self):
+        """检查播放状态"""
+        if pygame.mixer.music.get_busy():
+            # 如果还在播放，稍后再次检查
+            QTimer.singleShot(100, self.check_playback)
+        else:
+            # 播放结束
+            self.play_btn.setEnabled(True)
+            self.stop_btn.setEnabled(False)
+            self.status_bar.showMessage("播放完成")
+    
+    def stop_audio(self):
+        """停止播放"""
+        try:
+            pygame.mixer.music.stop()
+            self.play_btn.setEnabled(True)
+            self.stop_btn.setEnabled(False)
+            self.status_bar.showMessage("播放已停止")
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"停止播放失败：{str(e)}")
+    
+    def save_audio(self):
+        """保存音频文件"""
+        if not self.audio_file or not os.path.exists(self.audio_file):
+            QMessageBox.warning(self, "警告", "没有可保存的音频文件！")
+            return
+        
+        # 获取当前选择的格式
+        selected_format = self.format_combo.currentText().lower()
+        if selected_format == "mp3":
+            filter_str = "MP3文件 (*.mp3)"
+            ext = ".mp3"
+        elif selected_format == "wav":
+            filter_str = "WAV文件 (*.wav)"
+            ext = ".wav"
+        else:
+            filter_str = "AAC文件 (*.aac)"
+            ext = ".aac"
+            
+        filter_str += ";;所有文件 (*)"
+        
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "保存音频文件", "", filter_str
+        )
+        
+        if file_path:
+            # 确保文件扩展名正确
+            if not file_path.endswith(ext):
+                file_path += ext
+                
+            try:
+                import shutil
+                shutil.copy2(self.audio_file, file_path)
+                self.status_bar.showMessage(f"音频文件已保存: {file_path}")
+                QMessageBox.information(self, "成功", f"音频文件已保存到：{file_path}")
+            except Exception as e:
+                QMessageBox.critical(self, "错误", f"保存音频文件失败：{str(e)}")
+    
+    def show_about(self):
+        """显示关于页面"""
+        about_dialog = QDialog(self)
+        about_dialog.setWindowTitle("关于 IWZ TTS Studio")
+        about_dialog.setFixedSize(400, 300)
+        
+        layout = QVBoxLayout(about_dialog)
+        
+        # 标题
+        title_label = QLabel("IWZ TTS Studio")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_font = QFont()
+        title_font.setPointSize(16)
+        title_font.setBold(True)
+        title_label.setFont(title_font)
+        layout.addWidget(title_label)
+        
+        # 版本信息
+        version_label = QLabel("版本: 1.0")
+        version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(version_label)
+        
+        # 描述
+        description_label = QLabel(
+            "IWZ TTS Studio 是一个基于Edge TTS的语音合成系统，\n"
+            "支持多人对话语音合成、自定义语音属性设置等功能。\n\n"
+            "开发者: IWZ Studio 团队\n"
+            "© 2025 IWZ Studio. 保留所有权利。"
+        )
+        description_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        description_label.setWordWrap(True)
+        layout.addWidget(description_label)
+        
+        # 署名信息
+        creator_label = QLabel(f"项目创建者: {self.creator_name}")
+        creator_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        creator_label.setStyleSheet("color: #4fc3f7;")
+        layout.addWidget(creator_label)
+        
+        # 确定按钮
+        ok_button = QPushButton("确定")
+        ok_button.clicked.connect(about_dialog.accept)
+        ok_button.setFixedWidth(100)
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        button_layout.addWidget(ok_button)
+        button_layout.addStretch()
+        layout.addLayout(button_layout)
+        
+        about_dialog.exec()
+        
+    def get_creator_name(self):
+        """获取创建者名称，如果用户未设置则使用默认名称"""
+        # 创建输入对话框
+        dialog = QDialog(self)
+        dialog.setWindowTitle("设置创建者")
+        dialog.setModal(True)
+        dialog.resize(300, 150)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # 说明标签
+        info_label = QLabel("请输入项目创建者名称：")
+        layout.addWidget(info_label)
+        
+        # 输入框
+        creator_edit = QLineEdit()
+        creator_edit.setText(self.creator_name)  # 使用当前creator名称作为默认值
+        layout.addWidget(creator_edit)
+        
+        # 按钮
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+        
+        # 如果用户点击确定，保存新的creator名称
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            creator_name = creator_edit.text().strip()
+            if creator_name:
+                self.creator_name = creator_name
+                return creator_name
+        
+        # 如果用户取消或输入为空，返回当前creator名称
+        return self.creator_name
+    
+    def closeEvent(self, event):
+        """关闭事件处理"""
+        # 等待工作线程完成
+        if self.tts_worker and self.tts_worker.isRunning():
+            self.tts_worker.quit()
+            self.tts_worker.wait()
+        
+        # 清理临时文件
+        if self.audio_file and os.path.exists(self.audio_file):
+            try:
+                os.unlink(self.audio_file)
+            except:
+                pass
+        
+        # 停止播放
+        try:
+            pygame.mixer.quit()
+        except:
+            pass
+        
+        event.accept()
+
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = TTSStudio()
+    window.show()
+    sys.exit(app.exec())
